@@ -1,7 +1,14 @@
 {
-  "scoreApiBase": "https://example.supabase.co/functions/v1",
   "chainSelectorName": "ethereum-testnet-sepolia",
-  "minIncomeBRL": 1500,
+  "consumerAddress": "0x3884e82fFeE129e95b48D0f4F749BE80DFC4E563",
+  "gasLimit": "3000000",
   "scoreThreshold": 600,
-  "maxLoanUsdcMicro": "10000000"
+  "brlPerUsdc": 5,
+  "moneyCapBRL": 1,
+  "creditLimitMaxBRL": 10000,
+  "creditLineBaseBRL": 1,
+  "creditLineStepBRL": 1,
+  "creditLineMaxTiers": 4,
+  "demoRelaxLimit": true,
+  "writableBitmap": "1"
 }

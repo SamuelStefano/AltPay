@@ -11,6 +11,7 @@ const LOAN_TENOR_DAYS = 7
 interface RequestBody {
   requestId: string
   txRelease: string
+  loanPda?: string
 }
 
 interface ResponseBody {
@@ -62,8 +63,14 @@ serve((req) => withAuth(req, async (req, user) => {
     await admin.from('loan_requests').update({ cpf_hash: cpfHashHex }).eq('id', body.requestId)
   }
 
-  const loanPda = await deriveLoanPdaIfExists(cpfHashHex)
-  if (!loanPda) return json({ error: 'Loan PDA not found on-chain for this cpf_hash' }, 400, req)
+  // PDA derivado no cliente (deterministico de cpf_hash + program). Verificamos
+  // só a existência on-chain via RPC — sem carregar web3.js, que estoura o isolate (546).
+  let loanPda: string | null = null
+  if (body.loanPda) {
+    const exists = await pdaExistsOnChain(body.loanPda)
+    if (!exists) return json({ error: 'Loan PDA not found on-chain' }, 400, req)
+    loanPda = body.loanPda
+  }
 
   const dueDate = new Date(Date.now() + LOAN_TENOR_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   const insertRow: Record<string, unknown> = {
@@ -131,30 +138,21 @@ async function verifyTxOnChain(txSig: string): Promise<{ ok: true } | { ok: fals
   }
 }
 
-async function deriveLoanPdaIfExists(cpfHashHex: string): Promise<string | null> {
+async function pdaExistsOnChain(loanPdaB58: string): Promise<boolean> {
   try {
-    const { PublicKey } = await import('https://esm.sh/@solana/web3.js@1.95.3?target=denonext')
-    const clean = cpfHashHex.startsWith('\\x') ? cpfHashHex.slice(2) : cpfHashHex
-    const cpfHash = new Uint8Array(clean.length / 2)
-    for (let i = 0; i < cpfHash.length; i++) cpfHash[i] = parseInt(clean.substr(i * 2, 2), 16)
-    const [loanPda] = PublicKey.findProgramAddressSync(
-      [new TextEncoder().encode('loan'), cpfHash],
-      new PublicKey(PROGRAM_ID),
-    )
     const r = await fetch(RPC_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0', id: 1, method: 'getAccountInfo',
-        params: [loanPda.toBase58(), { commitment: 'confirmed', encoding: 'base64' }],
+        params: [loanPdaB58, { commitment: 'confirmed', encoding: 'base64' }],
       }),
     })
     const data = await r.json() as { result?: { value?: { owner?: string } | null } }
     const value = data.result?.value
-    if (!value || value.owner !== PROGRAM_ID) return null
-    return loanPda.toBase58()
+    return Boolean(value && value.owner === PROGRAM_ID)
   } catch {
-    return null
+    return false
   }
 }
 

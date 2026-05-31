@@ -56,8 +56,6 @@ export function ApprovedHero({ decision, phase, release, onEfetuar, onSacar, onS
         <Pill tone="paper" dot size="md">
           <span>Score {Math.round(decision.score / 10)}/100</span>
           <span style={{ width: 1, height: 14, background: 'var(--line)' }} />
-          <span>{decision.installments}× sem complicação</span>
-          <span style={{ width: 1, height: 14, background: 'var(--line)' }} />
           <span>{decision.interestPct.toFixed(1)}%/mês</span>
         </Pill>
       </div>

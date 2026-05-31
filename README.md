@@ -4,6 +4,8 @@
 
 Pede no app → score on-chain via Chainlink CRE aprova → **Pix cai na conta em segundos**. Construído para o **Hackanation 2026** (TokenNation · Solana + Chainlink · tese RWA).
 
+🔗 **Live (devnet):** https://ubermoney.devfellowship.com — conecta com Phantom em devnet.
+
 ## Pitch
 > Furou o pneu? Acabou a gasolina? O dinheiro cai no seu Pix em segundos. Score on-chain, juros baixos, sem consulta ao SPC.
 
@@ -26,6 +28,8 @@ Pede no app → score on-chain via Chainlink CRE aprova → **Pix cai na conta e
 | Hosting | Vercel |
 
 ## Chainlink integration (DR-004)
+
+> 📄 **Detalhe completo (arquivos, linhas, endereços, estado real):** [`docs/chainlink/INTEGRATION.md`](docs/chainlink/INTEGRATION.md)
 
 100% on-chain Solana. Dois produtos Chainlink reais num único programa Anchor.
 
@@ -184,8 +188,6 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 - **Q24** Phantom only (drop Privy/Google/Uber OAuth).
 - **Q25** Helius devnet RPC + QuickNode failover.
 - **Q27** Solana devnet (não testnet).
-- **Q29** 1 Edge fn `usdc-to-pix` compartilhada com Chain Oil.
-- **Q30** Samuel = AltPay 100%, Will = Chain Oil 100%.
 
 ## LGPD — frase defensável (pitch jury)
 > "Nosso contrato armazena um hash com pepper do CPF — **pseudonimização por design conforme LGPD art.13 §4º**. O CPF real fica exclusivamente no backend. Em produção migramos para identificador opaco sem nenhuma relação matemática com o CPF, eliminando o risco residual de reversão."
@@ -201,7 +203,7 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 - **`cash_out` não tem estado terminal.** Move USDC do motorista PRA o vault (prejudica o motorista, não o protocolo) e é gateado off-chain por `cashout_intents` (índice único, fail-closed antes de qualquer Pix). v2: flipar `status` p/ `CashedOut`.
 - **Circuit breaker lê feed devnet stale (~$22).** O guard `SOL < $10` está sempre verde; o valor está em provar a CPI real (programa + feed pinados), não em halt de mercado real.
 
-## Status (27/05/2026 — gate EOD batido ✅)
+## Status (31/05/2026 — deployado em prod ✅)
 - ✅ Anchor program **DEPLOYADO em devnet** (program ID acima)
 - ✅ Vault inicializado + pre-funded com 20 USDC oficial
 - ✅ Smoke test on-chain passou (1 USDC transferido pelo programa)
@@ -212,10 +214,10 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 - ✅ Front 6 telas atomic design + 2-step UX (`Efetuar` → `Sacar`)
 - ✅ Wallet UX: Phantom only, autoConnect=false, dedupe signMessage
 - ✅ Helius RPC + QuickNode failover env (Q25 v9)
-- ⏳ CRE simulate + screenshot (Samuel pega CRE_API_KEY)
-- ⏳ Vercel deploy (28/05 manhã)
+- ✅ CRE workflow score validado via `cre workflow simulate` (DON sandbox)
+- ✅ Vercel deploy em prod (https://ubermoney.devfellowship.com)
 - ⏳ Vídeo Plano B 60s (Samuel grava)
-- ⏳ USDC return (DR-003 D3: adiado 28/05, migration 0006 prep feita)
+- ⏳ USDC return (DR-003 D3: adiado, migration 0006 prep feita)
 
 ## Time
-Samuel Stefano (lead AltPay) · William Rodrigo (lead Chain Oil) · Tainan Fidelis (TL/arquitetura) · Orlando Souza (mentor cripto) · Josyani/Lídia (front).
+Daniel Santos · Carlos Eduardo de Paula Nunes · Ryan.

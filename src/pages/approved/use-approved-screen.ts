@@ -3,7 +3,7 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import type { Connection, PublicKey } from '@solana/web3.js'
 import { useToast } from '@/components/organisms/toast-provider'
 import { sendPixMock } from '@/lib/mock'
-import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed, confirmLoan, cashOutToPix, getHome, type PixKeyType } from '@/lib/api'
+import { HAS_BACKEND, requestPayout, pollUntilConfirmed, confirmLoan, cashOutToPix, getHome, type PixKeyType } from '@/lib/api'
 import { buildBorrowerRequestLoanTx, buildCashOutTx, deriveLoanPda, USDC_DEVNET } from '@/lib/solana-tx-builder'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { Store } from '@/store'
@@ -17,8 +17,8 @@ import type { LoanDecision, PayoutReceipt } from '@/types/domain'
 //                ↑Step 1                              ↑Step 2
 type ClaimPhase = 'approved' | 'releasing' | 'usdc_received' | 'sacando' | 'done'
 
-// VITE_ONCHAIN_FLOW=true → motorista assina via Phantom (DR-004 F+)
-// VITE_ONCHAIN_FLOW=false → admin signa server-side (DR-002 legacy, fallback)
+// VITE_ONCHAIN_FLOW=true → motorista assina via Phantom (DR-004 F+).
+// false só existe pra demo sem backend (simula USDC); não há mais signer admin.
 const ONCHAIN_FLOW = (import.meta.env.VITE_ONCHAIN_FLOW ?? 'true').toLowerCase() === 'true'
 
 interface UseApprovedScreenInput {
@@ -148,7 +148,7 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
         })
         await connection.confirmTransaction(sig, 'confirmed')
 
-        const confirmed = await confirmLoan(decision.requestId, sig).catch((e) => {
+        const confirmed = await confirmLoan(decision.requestId, sig, loanPda.toBase58()).catch((e) => {
           console.error('[efetuar] confirm-loan failed (tx confirmou mas DB nao espelhou)', e)
           return null
         })
@@ -161,15 +161,18 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
           txRelease: sig,
           onchainUsdc,
         })
-        if (confirmed) decision.loanId = confirmed.loanId
-      } else if (HAS_BACKEND && decision.loanId) {
-        const r = await releaseLoan(decision.loanId)
-        setRelease({ cpfHashHex: r.cpfHashHex, amountUSDC: r.amountUSDC, txRelease: r.txRelease })
-        if (r.status === 'already_released') {
-          console.warn('[efetuar] loan já released previamente, recuperando', r.txRelease)
+        if (confirmed) {
+          decision.loanId = confirmed.loanId
+        } else {
+          // confirm-loan não espelhou: sem loanId, o saque/pagamento ficam inacessíveis.
+          // Recupera o empréstimo ativo (tx já confirmou on-chain).
+          try {
+            const home = await getHome()
+            if (home.activeLoan) decision.loanId = home.activeLoan.id
+          } catch { /* segue com o que tiver */ }
         }
       } else {
-        // Sem backend: simula USDC recebido instantâneo
+        // Sem backend (ou flow não-onchain): simula USDC recebido instantâneo
         setRelease({ amountUSDC: Math.round(decision.approvedAmountBRL * 1e6 / 5) })
       }
       setPhase('usdc_received')
@@ -246,7 +249,7 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
             kind: 'loan',
             amountBRL: decision.approvedAmountBRL,
             label: 'Empréstimo aberto',
-            sub: `${decision.installments}× · ${decision.interestPct.toFixed(1)}%/mês · vence ${dateBR(decision.dueDate)}`,
+            sub: `${decision.interestPct.toFixed(1)}%/mês · vence ${dateBR(decision.dueDate)}`,
             timestamp: r.timestamp,
           },
           ...s.activity,

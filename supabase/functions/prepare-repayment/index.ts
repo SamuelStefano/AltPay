@@ -51,12 +51,17 @@ serve((req) => withAuth(req, async (req, user) => {
     .in('status', ['pending', 'confirmed'])
     .maybeSingle()
 
-  const { PublicKey } = await import('npm:@solana/web3.js@1.95.0')
-  const [loanPdaPubkey] = PublicKey.findProgramAddressSync(
-    [new TextEncoder().encode('loan'), cpfHashBytes],
-    new PublicKey(PROGRAM_ID),
-  )
-  const loanPda = loanPdaPubkey.toBase58()
+  let loanPda: string
+  try {
+    const { PublicKey } = await import('npm:@solana/web3.js@1.95.0?target=denonext')
+    const [loanPdaPubkey] = PublicKey.findProgramAddressSync(
+      [new TextEncoder().encode('loan'), cpfHashBytes],
+      new PublicKey(PROGRAM_ID),
+    )
+    loanPda = loanPdaPubkey.toBase58()
+  } catch (e) {
+    return json({ error: 'Loan PDA derivation failed', details: String(e) }, 500, req)
+  }
 
   if (existing) {
     const woovi = (existing.woovi_payload ?? {}) as Record<string, unknown>

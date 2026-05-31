@@ -7,7 +7,11 @@ import { createCharge, WOOVI_MODE } from '../_shared/woovi.ts'
 import { cappedBRL, brlToUsdc } from '../_shared/limits.ts'
 
 const PROGRAM_ID_STR = Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
-const VAULT_TOKEN_SEED = new TextEncoder().encode('vault_token')
+// PDA determinística [vault] e mint USDC. Constantes evitam derivar/baixar
+// web3.js no isolate — derivação estática a partir do PROGRAM_ID.
+const VAULT_PDA = Deno.env.get('VAULT_PDA') ?? '6XPi5Xo6N5Ddq9hpZHzZNGWeQT42Boz1uF6Lwo7Dosrf'
+const USDC_MINT = Deno.env.get('USDC_MINT_DEVNET') ?? '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'
+const RPC_URL = Deno.env.get('SOLANA_RPC_URL') ?? 'https://api.devnet.solana.com'
 
 interface Body {
   loanId: string
@@ -17,30 +21,38 @@ interface Body {
   clientIntentId: string
 }
 
+interface RpcTokenBalance {
+  accountIndex: number
+  mint: string
+  owner?: string
+  uiTokenAmount: { amount: string }
+}
+
 // D5: verificação on-chain barata mas honesta. Prova que a tx assinada pelo
-// motorista chamou nosso programa E o vault token account recebeu >= amount.
-// web3.js é importado lazy aqui (não no topo) — import estático estoura o
-// limite de boot do isolate Edge (HTTP 546).
+// motorista chamou nosso programa E uma conta de token USDC pertencente ao
+// vault PDA recebeu >= amount. Usa JSON-RPC cru (fetch) em vez de web3.js —
+// carregar web3.js no isolate estoura WORKER_RESOURCE_LIMIT (HTTP 546).
 async function verifyCashOut(sig: string, borrowerWallet: string, amountUSDC: bigint): Promise<string | null> {
-  const { connection, deriveVaultPda, PublicKey } = await import('../_shared/anchor-signer.ts')
-  const programId = new PublicKey(PROGRAM_ID_STR)
-  const conn = connection()
-  const tx = await conn.getTransaction(sig, { maxSupportedTransactionVersion: 0, commitment: 'confirmed' })
+  const res = await fetch(RPC_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0', id: 1, method: 'getTransaction',
+      params: [sig, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0, commitment: 'confirmed' }],
+    }),
+  })
+  if (!res.ok) return `rpc getTransaction http ${res.status}`
+  const tx = (await res.json())?.result
   if (!tx) return 'tx not found on-chain (devnet)'
   if (tx.meta?.err) return `tx failed on-chain: ${JSON.stringify(tx.meta.err)}`
 
-  const keys = tx.transaction.message.staticAccountKeys.map((k) => k.toBase58())
-  if (!keys.includes(programId.toBase58())) return 'tx does not call uber_money program'
+  const keys: string[] = (tx.transaction?.message?.accountKeys ?? []).map((k: { pubkey: string }) => k.pubkey)
+  if (!keys.includes(PROGRAM_ID_STR)) return 'tx does not call uber_money program'
   if (keys[0] !== borrowerWallet) return 'tx fee payer is not the borrower wallet'
 
-  const [vault] = deriveVaultPda()
-  const [vtaPk] = PublicKey.findProgramAddressSync([VAULT_TOKEN_SEED, vault.toBuffer()], programId)
-  const vta = vtaPk.toBase58()
-  const vtaIndex = keys.indexOf(vta)
-  if (vtaIndex < 0) return 'vault token account not in tx'
-
-  const pre = tx.meta?.preTokenBalances?.find((b) => b.accountIndex === vtaIndex)
-  const post = tx.meta?.postTokenBalances?.find((b) => b.accountIndex === vtaIndex)
+  const isVaultUsdc = (b: RpcTokenBalance) => b.owner === VAULT_PDA && b.mint === USDC_MINT
+  const pre = (tx.meta?.preTokenBalances as RpcTokenBalance[] | undefined)?.find(isVaultUsdc)
+  const post = (tx.meta?.postTokenBalances as RpcTokenBalance[] | undefined)?.find(isVaultUsdc)
   // Sem o saldo pré, preAmt cairia em 0 e um saldo pré-existente alto passaria
   // como se fosse depósito — falso positivo. Exige ambos os snapshots.
   if (!pre || !post) return 'vault token balance snapshot missing in tx metadata'

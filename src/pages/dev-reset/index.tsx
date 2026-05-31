@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
+import bs58 from 'bs58'
 import { Screen } from '@/components/atoms/screen'
 import { Button } from '@/components/atoms/button'
+import { getNonce, verifyWallet } from '@/lib/api'
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL as string
 
@@ -51,9 +53,20 @@ export function DevResetScreen() {
     if (!connected) return
     setBusy(true); setOut(null); setConfirming(false)
     try {
+      if (!wallet.signMessage) {
+        setOut({ ok: false, msg: 'Carteira não suporta assinatura' })
+        return
+      }
+      // dev-reset exige JWT (withAuth + checa ownership da wallet): autentica antes.
+      const { nonce, message } = await getNonce(connected)
+      const sig = await wallet.signMessage(new TextEncoder().encode(message))
+      const { access_token } = await verifyWallet(connected, nonce, bs58.encode(sig))
       const r = await fetch(`${URL_}/functions/v1/dev-reset`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${access_token}`,
+        },
         body: JSON.stringify({ wallet: connected }),
       })
       const data = await r.json()

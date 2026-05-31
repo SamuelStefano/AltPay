@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ActivityItem, LoanDecision, PayoutReceipt, ScoreBreakdownDecision } from '@/types/domain'
-import type { LoanRequestPayload, ScoreResult, PrepareRepaymentRequest, PrepareRepaymentResponse, ConfirmRepaymentRequest, ConfirmRepaymentResponse } from '@/types/api'
+import type { LoanRequestPayload, ScoreResult, CreDecision, PrepareRepaymentRequest, PrepareRepaymentResponse, ConfirmRepaymentRequest, ConfirmRepaymentResponse } from '@/types/api'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -161,7 +161,7 @@ export async function requestLoan(payload: LoanRequestPayload): Promise<LoanDeci
 }
 
 export async function scoreCredit(inputs: LoanRequestPayload): Promise<ScoreResult> {
-  const r = await authedFetch('score-credit', {
+  const body = {
     amountBRL: inputs.amountBRL,
     reason: REASON_MAP[inputs.reason] ?? 'other',
     otherText: inputs.otherText,
@@ -172,9 +172,23 @@ export async function scoreCredit(inputs: LoanRequestPayload): Promise<ScoreResu
     nota_motorista: inputs.nota_motorista,
     status_veiculo: inputs.status_veiculo,
     negativacao: inputs.negativacao,
-  })
+  }
+  const r = await authedFetch('score-credit', body)
   if (!r.ok) throw new Error(`score-credit: ${r.status} ${await r.text()}`)
-  return r.json() as Promise<ScoreResult>
+  const result = (await r.json()) as ScoreResult
+  const cre = await creDecide(body)
+  if (cre) result.cre = cre
+  return result
+}
+
+async function creDecide(body: unknown): Promise<CreDecision | null> {
+  try {
+    const r = await authedFetch('cre-decide', body)
+    if (!r.ok) return null
+    return (await r.json()) as CreDecision
+  } catch {
+    return null
+  }
 }
 
 export interface ConfirmLoanResponse {
@@ -184,8 +198,8 @@ export interface ConfirmLoanResponse {
   explorer: string
 }
 
-export async function confirmLoan(requestId: string, txRelease: string): Promise<ConfirmLoanResponse> {
-  const r = await authedFetch('confirm-loan', { requestId, txRelease })
+export async function confirmLoan(requestId: string, txRelease: string, loanPda?: string): Promise<ConfirmLoanResponse> {
+  const r = await authedFetch('confirm-loan', { requestId, txRelease, loanPda })
   if (!r.ok) throw new Error(`confirm-loan: ${r.status} ${await r.text()}`)
   return r.json()
 }
@@ -198,22 +212,6 @@ interface PayoutResponse {
   correlationId: string
   amountBRL: number
   mode?: 'prod' | 'mock' | 'sandbox'
-}
-
-interface ReleaseResponse {
-  step: 'release'
-  status: 'confirmed' | 'already_released' | 'pending_anchor_deploy'
-  cpfHashHex?: string
-  amountUSDC?: number
-  txRelease?: string
-  explorer?: string
-  score?: number
-}
-
-export async function releaseLoan(loanId: string): Promise<ReleaseResponse> {
-  const r = await authedFetch('request-payout', { action: 'release', loanId })
-  if (!r.ok) throw new Error(`release-loan: ${r.status} ${await r.text()}`)
-  return r.json()
 }
 
 export interface ScoreAttestation {
