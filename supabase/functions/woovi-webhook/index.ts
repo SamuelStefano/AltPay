@@ -14,15 +14,10 @@ if (INSECURE_MODE && !LOCAL_DEV && !ALLOWED_INSECURE_ENVS.has(ENVIRONMENT ?? '')
   throw new Error('WOOVI_WEBHOOK_INSECURE_MODE=true exige ENVIRONMENT in {sandbox,staging,local} ou LOCAL_DEV=true')
 }
 
-async function verifyHmac(rawBody: string, signature: string, secret: string): Promise<boolean> {
-  const sig = signature.startsWith('sha256=') ? signature.slice(7) : signature
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const computed = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody))
-  const hex = Array.from(new Uint8Array(computed)).map((b) => b.toString(16).padStart(2, '0')).join('')
-  // constant-time comparison
-  if (hex.length !== sig.length) return false
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
   let mismatch = 0
-  for (let i = 0; i < hex.length; i++) mismatch |= hex.charCodeAt(i) ^ sig.charCodeAt(i)
+  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
   return mismatch === 0
 }
 
@@ -40,10 +35,8 @@ serve(async (req) => {
   } else {
     // Fail-closed em prod: sem secret = misconfigured
     if (!WEBHOOK_SECRET) return json({ error: 'Webhook misconfigured (missing WOOVI_WEBHOOK_SECRET)' }, 500)
-    const sig = req.headers.get('x-webhook-signature') ?? req.headers.get('x-openpix-signature') ?? ''
-    if (!sig) return json({ error: 'Missing signature' }, 401)
-    const ok = await verifyHmac(raw, sig, WEBHOOK_SECRET)
-    if (!ok) return json({ error: 'Invalid signature' }, 403)
+    const auth = req.headers.get('authorization') ?? req.headers.get('x-webhook-authorization') ?? ''
+    if (!timingSafeEqual(auth, WEBHOOK_SECRET)) return json({ error: 'Unauthorized' }, 401)
   }
 
   let payload: Record<string, any>
