@@ -41,18 +41,18 @@ export function ApprovedScreen({ decision, onHome, onRepay }: ApprovedScreenProp
           </div>
           <PixNotification show={a.showNotif} amountBRL={a.receipt?.amountBRL ?? decision.approvedAmountBRL} />
         </div>
-
-        <Sheet open={a.showReceipt} onClose={() => a.setShowReceipt(false)}>
-          {a.receipt && <Receipt receipt={a.receipt} decision={decision} onClose={() => a.setShowReceipt(false)} />}
-        </Sheet>
-
-        <PixKeyModal
-          open={a.showPixModal}
-          onClose={a.closePixModal}
-          onConfirm={a.confirmPix}
-          amountBRL={decision.approvedAmountBRL}
-        />
       </div>
+
+      <Sheet open={a.showReceipt} onClose={() => a.setShowReceipt(false)}>
+        {a.receipt && <Receipt receipt={a.receipt} decision={decision} onClose={() => a.setShowReceipt(false)} />}
+      </Sheet>
+
+      <PixKeyModal
+        open={a.showPixModal}
+        onClose={a.closePixModal}
+        onConfirm={a.confirmPix}
+        amountBRL={decision.approvedAmountBRL}
+      />
     </Screen>
   )
 }
