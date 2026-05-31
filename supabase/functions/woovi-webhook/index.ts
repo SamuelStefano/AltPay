@@ -21,6 +21,26 @@ function timingSafeEqual(a: string, b: string): boolean {
   return mismatch === 0
 }
 
+async function hmacDigests(raw: string, secret: string): Promise<{ b64: string; hex: string }> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw)))
+  return {
+    b64: btoa(String.fromCharCode(...mac)),
+    hex: Array.from(mac).map((b) => b.toString(16).padStart(2, '0')).join(''),
+  }
+}
+
+async function authorize(req: Request, raw: string, secret: string): Promise<boolean> {
+  const auth = req.headers.get('authorization') ?? req.headers.get('x-webhook-authorization') ?? ''
+  if (auth && timingSafeEqual(auth, secret)) return true
+  const rawSig = req.headers.get('x-webhook-signature') ?? req.headers.get('x-openpix-signature') ?? ''
+  const sig = rawSig.startsWith('sha256=') ? rawSig.slice(7) : rawSig
+  const { b64, hex } = await hmacDigests(raw, secret)
+  if (sig && (timingSafeEqual(sig, b64) || timingSafeEqual(sig.toLowerCase(), hex))) return true
+  console.warn('[woovi-webhook] auth falhou', { recvSig: rawSig, expectB64: b64, expectHex: hex, hadAuthHeader: Boolean(auth) })
+  return false
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return handleOptions()
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
@@ -43,8 +63,7 @@ serve(async (req) => {
     console.warn('[woovi-webhook] INSECURE_MODE=true', { headers, bodyPreview: raw.slice(0, 300) })
   } else {
     if (!WEBHOOK_SECRET) return json({ error: 'Webhook misconfigured (missing WOOVI_WEBHOOK_SECRET)' }, 500)
-    const auth = req.headers.get('authorization') ?? req.headers.get('x-webhook-authorization') ?? ''
-    if (!timingSafeEqual(auth, WEBHOOK_SECRET)) return json({ error: 'Unauthorized' }, 401)
+    if (!(await authorize(req, raw, WEBHOOK_SECRET))) return json({ error: 'Unauthorized' }, 401)
   }
 
   const transfer = payload.transfer ?? payload.charge ?? payload
