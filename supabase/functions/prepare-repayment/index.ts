@@ -7,8 +7,7 @@ import { hexToBytes } from '../_shared/bytes.ts'
 import { brlToUsdc, cappedBRL } from '../_shared/limits.ts'
 import { generateAndStoreRepayAttestation } from '../_shared/repay-attestation.ts'
 import { deriveCpfHash } from '../_shared/cpf-hash.ts'
-
-const PROGRAM_ID = '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
+import { deriveLoanPda } from '../_shared/anchor-signer.ts'
 
 serve((req) => withAuth(req, async (req, user) => {
   let body: { loanId?: unknown }
@@ -51,17 +50,7 @@ serve((req) => withAuth(req, async (req, user) => {
     .in('status', ['pending', 'confirmed'])
     .maybeSingle()
 
-  let loanPda: string
-  try {
-    const { PublicKey } = await import('npm:@solana/web3.js@1.95.0?target=denonext')
-    const [loanPdaPubkey] = PublicKey.findProgramAddressSync(
-      [new TextEncoder().encode('loan'), cpfHashBytes],
-      new PublicKey(PROGRAM_ID),
-    )
-    loanPda = loanPdaPubkey.toBase58()
-  } catch (e) {
-    return json({ error: 'Loan PDA derivation failed', details: String(e) }, 500, req)
-  }
+  const loanPda = deriveLoanPda(cpfHashBytes)[0].toBase58()
 
   if (existing) {
     const woovi = (existing.woovi_payload ?? {}) as Record<string, unknown>
