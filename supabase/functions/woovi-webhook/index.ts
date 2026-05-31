@@ -27,25 +27,24 @@ serve(async (req) => {
 
   const raw = await req.text()
 
-  if (INSECURE_MODE) {
-    // Sandbox temp: aceita sem HMAC. Loga headers pra capturar o formato Woovi sandbox.
-    const headers: Record<string, string> = {}
-    req.headers.forEach((v, k) => { headers[k] = v })
-    console.warn('[woovi-webhook] INSECURE_MODE=true (sandbox)', { headers, bodyPreview: raw.slice(0, 300) })
-  } else {
-    // Fail-closed em prod: sem secret = misconfigured
-    if (!WEBHOOK_SECRET) return json({ error: 'Webhook misconfigured (missing WOOVI_WEBHOOK_SECRET)' }, 500)
-    const auth = req.headers.get('authorization') ?? req.headers.get('x-webhook-authorization') ?? ''
-    if (!timingSafeEqual(auth, WEBHOOK_SECRET)) return json({ error: 'Unauthorized' }, 401)
-  }
-
   let payload: Record<string, any>
   try { payload = JSON.parse(raw) } catch { return json({ error: 'Invalid JSON' }, 400) }
 
-  // Teste de webhook do painel Woovi (ping) — não tem correlationID, só responde OK
+  // Ping do painel Woovi: inócuo (sem correlationID, sem ação) — responde 200 antes
+  // da auth pra o painel marcar o webhook como OK mesmo se o teste não levar o header.
   if (payload.evento === 'teste_webhook' || payload.event === 'teste_webhook') {
     console.log('[woovi-webhook] ping recebido', payload)
     return json({ received: true, ping: true })
+  }
+
+  if (INSECURE_MODE) {
+    const headers: Record<string, string> = {}
+    req.headers.forEach((v, k) => { headers[k] = v })
+    console.warn('[woovi-webhook] INSECURE_MODE=true', { headers, bodyPreview: raw.slice(0, 300) })
+  } else {
+    if (!WEBHOOK_SECRET) return json({ error: 'Webhook misconfigured (missing WOOVI_WEBHOOK_SECRET)' }, 500)
+    const auth = req.headers.get('authorization') ?? req.headers.get('x-webhook-authorization') ?? ''
+    if (!timingSafeEqual(auth, WEBHOOK_SECRET)) return json({ error: 'Unauthorized' }, 401)
   }
 
   const transfer = payload.transfer ?? payload.charge ?? payload
