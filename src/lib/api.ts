@@ -200,22 +200,6 @@ interface PayoutResponse {
   mode?: 'prod' | 'mock' | 'sandbox'
 }
 
-interface ReleaseResponse {
-  step: 'release'
-  status: 'confirmed' | 'already_released' | 'pending_anchor_deploy'
-  cpfHashHex?: string
-  amountUSDC?: number
-  txRelease?: string
-  explorer?: string
-  score?: number
-}
-
-export async function releaseLoan(loanId: string): Promise<ReleaseResponse> {
-  const r = await authedFetch('request-payout', { action: 'release', loanId })
-  if (!r.ok) throw new Error(`release-loan: ${r.status} ${await r.text()}`)
-  return r.json()
-}
-
 export interface ScoreAttestation {
   requestId: string
   cpfHashHex: string

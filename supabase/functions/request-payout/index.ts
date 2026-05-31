@@ -4,94 +4,20 @@ import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 import { isValidCpf } from '../_shared/cpf.ts'
-import { deriveCpfHash } from '../_shared/cpf-hash.ts'
-import { cappedBRL, brlToUsdc } from '../_shared/limits.ts'
+import { cappedBRL } from '../_shared/limits.ts'
 import { WOOVI_BASE_URL, WOOVI_MODE } from '../_shared/woovi.ts'
 
 const WOOVI_API_KEY = Deno.env.get('WOOVI_API_KEY') ?? ''
 
-type ReleaseBody = { action: 'release'; loanId: string }
-type PayoutBody  = { action: 'payout';  loanId: string; pixKey: string; pixKeyType: 'cpf' | 'email' | 'phone' | 'evp' }
-type Body = ReleaseBody | PayoutBody
+type PayoutBody = { action: 'payout'; loanId: string; pixKey: string; pixKeyType: 'cpf' | 'email' | 'phone' | 'evp' }
 
 serve((req) => withAuth(req, async (req, user) => {
-  let body: Body
+  let body: PayoutBody
   try { body = await req.json() } catch { return json({ error: 'Invalid JSON' }, 400, req) }
 
-  switch (body.action) {
-    case 'release': return handleRelease(req, admin, user.id, body)
-    case 'payout':  return handlePayout(req, admin, user.id, body)
-    default:        return json({ error: 'Invalid action — expected "release" or "payout"' }, 400, req)
-  }
+  if (body.action !== 'payout') return json({ error: 'Invalid action — expected "payout"' }, 400, req)
+  return handlePayout(req, admin, user.id, body)
 }))
-
-async function handleRelease(req: Request, admin: SupabaseClient, userId: string, body: ReleaseBody) {
-  if (!body.loanId) return json({ error: 'loanId required' }, 400, req)
-
-  const { data: loan, error: loanErr } = await admin
-    .from('loans')
-    .select('id, status, principal_brl, tx_release, request_id, loan_requests!inner(user_id, score)')
-    .eq('id', body.loanId)
-    .maybeSingle()
-  if (loanErr || !loan) return json({ error: 'Loan not found' }, 404, req)
-  if ((loan as any).loan_requests.user_id !== userId) return json({ error: 'Forbidden' }, 403, req)
-  if (loan.tx_release) {
-    return json({
-      step: 'release',
-      status: 'already_released',
-      txRelease: loan.tx_release,
-      explorer: `https://explorer.solana.com/tx/${loan.tx_release}?cluster=devnet`,
-    }, 200, req)
-  }
-
-  const derived = await deriveCpfHash(admin, userId)
-  if (!derived.ok) return json({ error: derived.error }, derived.status, req)
-  const { cpfHash, cpfHashHex } = derived
-
-  const amountUSDC = brlToUsdc(Number(loan.principal_brl))
-  const score = Number((loan as any).loan_requests.score ?? 0)
-
-  await admin.from('loans').update({ cpf_hash: cpfHashHex }).eq('id', loan.id)
-  await admin.from('loan_requests').update({ cpf_hash: cpfHashHex }).eq('id', loan.request_id)
-
-  const { data: userRow2 } = await admin.from('users').select('wallet').eq('id', userId).maybeSingle()
-  if (!userRow2?.wallet) return json({ error: 'User wallet not registered' }, 400, req)
-
-  try {
-    const { releaseLoan: anchorReleaseLoan, PublicKey } = await import('../_shared/anchor-signer.ts') as
-      typeof import('../_shared/anchor-signer.ts') & { PublicKey: typeof import('https://esm.sh/@solana/web3.js@1.95.3?target=denonext').PublicKey }
-    const txSig = await anchorReleaseLoan({
-      cpfHash,
-      amount: amountUSDC,
-      score,
-      borrower: new PublicKey(userRow2.wallet),
-    })
-    const { error: updErr } = await admin.from('loans').update({ tx_release: txSig }).eq('id', loan.id)
-    if (updErr) console.error('[release] CRITICAL: tx_release update failed after on-chain success', { txSig, loanId: loan.id, err: updErr.message })
-    return json({
-      step: 'release',
-      status: 'confirmed',
-      cpfHashHex,
-      amountUSDC: Number(amountUSDC),
-      score,
-      txRelease: txSig,
-      explorer: `https://explorer.solana.com/tx/${txSig}?cluster=devnet`,
-    }, 200, req)
-  } catch (e) {
-    const errMsg = e instanceof Error ? e.message : String(e)
-    if (errMsg.includes('SOLANA_ADMIN_KEYPAIR_JSON') || errMsg.includes('Vault account not found')) {
-      return json({
-        step: 'release',
-        status: 'pending_anchor_deploy',
-        cpfHashHex,
-        amountUSDC: Number(amountUSDC),
-        score,
-        note: errMsg,
-      }, 202, req)
-    }
-    return json({ error: 'release_loan failed', details: errMsg }, 502, req)
-  }
-}
 
 async function handlePayout(req: Request, admin: SupabaseClient, userId: string, body: PayoutBody) {
   if (!body.loanId || !body.pixKey || !body.pixKeyType) {

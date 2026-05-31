@@ -3,7 +3,7 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import type { Connection, PublicKey } from '@solana/web3.js'
 import { useToast } from '@/components/organisms/toast-provider'
 import { sendPixMock } from '@/lib/mock'
-import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed, confirmLoan, cashOutToPix, getHome, type PixKeyType } from '@/lib/api'
+import { HAS_BACKEND, requestPayout, pollUntilConfirmed, confirmLoan, cashOutToPix, getHome, type PixKeyType } from '@/lib/api'
 import { buildBorrowerRequestLoanTx, buildCashOutTx, deriveLoanPda, USDC_DEVNET } from '@/lib/solana-tx-builder'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { Store } from '@/store'
@@ -17,8 +17,8 @@ import type { LoanDecision, PayoutReceipt } from '@/types/domain'
 //                ↑Step 1                              ↑Step 2
 type ClaimPhase = 'approved' | 'releasing' | 'usdc_received' | 'sacando' | 'done'
 
-// VITE_ONCHAIN_FLOW=true → motorista assina via Phantom (DR-004 F+)
-// VITE_ONCHAIN_FLOW=false → admin signa server-side (DR-002 legacy, fallback)
+// VITE_ONCHAIN_FLOW=true → motorista assina via Phantom (DR-004 F+).
+// false só existe pra demo sem backend (simula USDC); não há mais signer admin.
 const ONCHAIN_FLOW = (import.meta.env.VITE_ONCHAIN_FLOW ?? 'true').toLowerCase() === 'true'
 
 interface UseApprovedScreenInput {
@@ -171,14 +171,8 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
             if (home.activeLoan) decision.loanId = home.activeLoan.id
           } catch { /* segue com o que tiver */ }
         }
-      } else if (HAS_BACKEND && decision.loanId) {
-        const r = await releaseLoan(decision.loanId)
-        setRelease({ cpfHashHex: r.cpfHashHex, amountUSDC: r.amountUSDC, txRelease: r.txRelease })
-        if (r.status === 'already_released') {
-          console.warn('[efetuar] loan já released previamente, recuperando', r.txRelease)
-        }
       } else {
-        // Sem backend: simula USDC recebido instantâneo
+        // Sem backend (ou flow não-onchain): simula USDC recebido instantâneo
         setRelease({ amountUSDC: Math.round(decision.approvedAmountBRL * 1e6 / 5) })
       }
       setPhase('usdc_received')
