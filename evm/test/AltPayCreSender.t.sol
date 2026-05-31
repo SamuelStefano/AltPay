@@ -8,7 +8,7 @@ contract Harness is AltPayCreSender {
         AltPayCreSender(
             address(0),
             address(0x1),
-            address(0x2),
+            address(0),
             16423721717087811551,
             bytes32(uint256(1)),
             bytes32(uint256(0x1111111111111111111111111111111111111111111111111111111111111111)),

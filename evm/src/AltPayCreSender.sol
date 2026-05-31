@@ -17,7 +17,7 @@ contract AltPayCreSender is IReceiver {
     address public owner;
     address public forwarder;
     IRouterClient public router;
-    address public linkToken;
+    address public feeToken;
     uint64 public destChainSelector;
     bytes32 public solanaReceiver;
     bytes32 public tokenReceiver;
@@ -33,12 +33,12 @@ contract AltPayCreSender is IReceiver {
 
     error NotForwarder(address sender);
     error NotOwner(address sender);
-    error InsufficientLink(uint256 fee, uint256 balance);
+    error InsufficientFee(uint256 fee, uint256 balance);
 
     constructor(
         address _forwarder,
         address _router,
-        address _link,
+        address _feeToken,
         uint64 _destChainSelector,
         bytes32 _solanaReceiver,
         bytes32 _tokenReceiver,
@@ -49,7 +49,7 @@ contract AltPayCreSender is IReceiver {
             ? 0x15fC6ae953E024d975e77382eEeC56A9101f9F88
             : _forwarder;
         router = IRouterClient(_router);
-        linkToken = _link;
+        feeToken = _feeToken;
         destChainSelector = _destChainSelector;
         solanaReceiver = _solanaReceiver;
         tokenReceiver = _tokenReceiver;
@@ -74,6 +74,12 @@ contract AltPayCreSender is IReceiver {
     function setSolanaReceiver(bytes32 _receiver) external onlyOwner {
         solanaReceiver = _receiver;
     }
+
+    function setFeeToken(address _feeToken) external onlyOwner {
+        feeToken = _feeToken;
+    }
+
+    receive() external payable {}
 
     function onReport(bytes calldata, bytes calldata report) external override {
         if (msg.sender != forwarder) revert NotForwarder(msg.sender);
@@ -102,7 +108,7 @@ contract AltPayCreSender is IReceiver {
             receiver: abi.encode(solanaReceiver),
             data: data,
             tokenAmounts: new Client.EVMTokenAmount[](0),
-            feeToken: linkToken,
+            feeToken: feeToken,
             extraArgs: Client._svmArgsToBytes(
                 Client.SVMExtraArgsV1({
                     computeUnits: computeUnits,
@@ -115,11 +121,16 @@ contract AltPayCreSender is IReceiver {
         });
 
         uint256 fee = router.getFee(destChainSelector, message);
-        uint256 balance = IERC20(linkToken).balanceOf(address(this));
-        if (fee > balance) revert InsufficientLink(fee, balance);
-        IERC20(linkToken).approve(address(router), fee);
-
-        bytes32 messageId = router.ccipSend(destChainSelector, message);
+        bytes32 messageId;
+        if (feeToken == address(0)) {
+            if (fee > address(this).balance) revert InsufficientFee(fee, address(this).balance);
+            messageId = router.ccipSend{value: fee}(destChainSelector, message);
+        } else {
+            uint256 balance = IERC20(feeToken).balanceOf(address(this));
+            if (fee > balance) revert InsufficientFee(fee, balance);
+            IERC20(feeToken).approve(address(router), fee);
+            messageId = router.ccipSend(destChainSelector, message);
+        }
         lastMessageId = messageId;
         emit CcipSent(messageId, loanDecisionPda32, amount, fee);
     }
@@ -135,9 +146,14 @@ contract AltPayCreSender is IReceiver {
         return bytes8(v);
     }
 
-    function withdrawLink(address to) external onlyOwner {
-        IERC20 link = IERC20(linkToken);
-        require(link.transfer(to, link.balanceOf(address(this))), "withdraw failed");
+    function withdrawNative(address to) external onlyOwner {
+        (bool ok,) = to.call{value: address(this).balance}("");
+        require(ok, "withdraw failed");
+    }
+
+    function withdrawToken(address token, address to) external onlyOwner {
+        IERC20 t = IERC20(token);
+        require(t.transfer(to, t.balanceOf(address(this))), "withdraw failed");
     }
 
     function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
