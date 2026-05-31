@@ -121,7 +121,9 @@ export function useRequestScreen({ onSubmit }: UseRequestScreenInput): UseReques
     setScoring(true)
     setScoreError(null)
     try {
-      const result = await scoreCredit(payload)
+      const result = await scoreCredit(payload, (cre) => {
+        setScoreResult((prev) => (prev ? { ...prev, cre } : prev))
+      })
       setScoreResult(result)
     } catch (e) {
       setScoreError(e instanceof Error ? e.message : 'Falha ao consultar score.')

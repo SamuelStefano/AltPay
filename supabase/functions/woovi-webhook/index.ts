@@ -14,16 +14,31 @@ if (INSECURE_MODE && !LOCAL_DEV && !ALLOWED_INSECURE_ENVS.has(ENVIRONMENT ?? '')
   throw new Error('WOOVI_WEBHOOK_INSECURE_MODE=true exige ENVIRONMENT in {sandbox,staging,local} ou LOCAL_DEV=true')
 }
 
-async function verifyHmac(rawBody: string, signature: string, secret: string): Promise<boolean> {
-  const sig = signature.startsWith('sha256=') ? signature.slice(7) : signature
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const computed = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody))
-  const hex = Array.from(new Uint8Array(computed)).map((b) => b.toString(16).padStart(2, '0')).join('')
-  // constant-time comparison
-  if (hex.length !== sig.length) return false
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
   let mismatch = 0
-  for (let i = 0; i < hex.length; i++) mismatch |= hex.charCodeAt(i) ^ sig.charCodeAt(i)
+  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
   return mismatch === 0
+}
+
+async function hmacDigests(raw: string, secret: string): Promise<{ b64: string; hex: string }> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw)))
+  return {
+    b64: btoa(String.fromCharCode(...mac)),
+    hex: Array.from(mac).map((b) => b.toString(16).padStart(2, '0')).join(''),
+  }
+}
+
+async function authorize(req: Request, raw: string, secret: string): Promise<boolean> {
+  const auth = req.headers.get('authorization') ?? req.headers.get('x-webhook-authorization') ?? ''
+  if (auth && timingSafeEqual(auth, secret)) return true
+  const rawSig = req.headers.get('x-webhook-signature') ?? req.headers.get('x-openpix-signature') ?? ''
+  const sig = rawSig.startsWith('sha256=') ? rawSig.slice(7) : rawSig
+  const { b64, hex } = await hmacDigests(raw, secret)
+  if (sig && (timingSafeEqual(sig, b64) || timingSafeEqual(sig.toLowerCase(), hex))) return true
+  console.warn('[woovi-webhook] auth falhou', { recvSig: rawSig, expectB64: b64, expectHex: hex, hadAuthHeader: Boolean(auth) })
+  return false
 }
 
 serve(async (req) => {
@@ -32,27 +47,23 @@ serve(async (req) => {
 
   const raw = await req.text()
 
-  if (INSECURE_MODE) {
-    // Sandbox temp: aceita sem HMAC. Loga headers pra capturar o formato Woovi sandbox.
-    const headers: Record<string, string> = {}
-    req.headers.forEach((v, k) => { headers[k] = v })
-    console.warn('[woovi-webhook] INSECURE_MODE=true (sandbox)', { headers, bodyPreview: raw.slice(0, 300) })
-  } else {
-    // Fail-closed em prod: sem secret = misconfigured
-    if (!WEBHOOK_SECRET) return json({ error: 'Webhook misconfigured (missing WOOVI_WEBHOOK_SECRET)' }, 500)
-    const sig = req.headers.get('x-webhook-signature') ?? req.headers.get('x-openpix-signature') ?? ''
-    if (!sig) return json({ error: 'Missing signature' }, 401)
-    const ok = await verifyHmac(raw, sig, WEBHOOK_SECRET)
-    if (!ok) return json({ error: 'Invalid signature' }, 403)
-  }
-
   let payload: Record<string, any>
   try { payload = JSON.parse(raw) } catch { return json({ error: 'Invalid JSON' }, 400) }
 
-  // Teste de webhook do painel Woovi (ping) — não tem correlationID, só responde OK
+  // Ping do painel Woovi: inócuo (sem correlationID, sem ação) — responde 200 antes
+  // da auth pra o painel marcar o webhook como OK mesmo se o teste não levar o header.
   if (payload.evento === 'teste_webhook' || payload.event === 'teste_webhook') {
     console.log('[woovi-webhook] ping recebido', payload)
     return json({ received: true, ping: true })
+  }
+
+  if (INSECURE_MODE) {
+    const headers: Record<string, string> = {}
+    req.headers.forEach((v, k) => { headers[k] = v })
+    console.warn('[woovi-webhook] INSECURE_MODE=true', { headers, bodyPreview: raw.slice(0, 300) })
+  } else {
+    if (!WEBHOOK_SECRET) return json({ error: 'Webhook misconfigured (missing WOOVI_WEBHOOK_SECRET)' }, 500)
+    if (!(await authorize(req, raw, WEBHOOK_SECRET))) return json({ error: 'Unauthorized' }, 401)
   }
 
   const transfer = payload.transfer ?? payload.charge ?? payload

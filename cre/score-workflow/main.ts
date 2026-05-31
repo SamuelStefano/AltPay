@@ -66,13 +66,6 @@ const classifyNegativacao = (n: WorkflowInput['negativacao']): Resposta =>
 
 const installmentsFor = (brl: number): number => (brl <= 3 ? 1 : brl <= 7 ? 2 : 3)
 
-const creditLineFor = (repaid: number | undefined, cfg: Config): number => {
-	const r = Number.isFinite(repaid) ? Math.max(0, Math.floor(repaid as number)) : 0
-	const tier = Math.min(r, cfg.creditLineMaxTiers)
-	const line = cfg.creditLineBaseBRL + cfg.creditLineStepBRL * tier
-	return Math.max(cfg.moneyCapBRL, Math.min(line, cfg.creditLimitMaxBRL))
-}
-
 type Decision = {
 	approved: boolean
 	rejectionReason: string | null
@@ -110,9 +103,12 @@ function computeScoreV5(input: WorkflowInput, cfg: Config): Decision {
 	const score = Math.round((points / MAX_POINTS) * 1000)
 
 	const baseRatio = input.negativacao === 'nao' ? 0.1 : 0.05
-	const limitBRL = creditLineFor(input.repaid_loans_count, cfg)
+	const limitBRL = Math.min(
+		Math.round(input.faturamento_mensal_brl * 0.1),
+		cfg.creditLimitMaxBRL,
+	)
 
-	if (input.amount_brl > limitBRL && !cfg.demoRelaxLimit) {
+	if (input.amount_brl > limitBRL) {
 		return {
 			approved: false,
 			rejectionReason: 'Valor excede o limite disponível.',

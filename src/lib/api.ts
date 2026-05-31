@@ -24,7 +24,7 @@ let _walletAccessToken: string | null = null
 export function setWalletAccessToken(token: string | null) { _walletAccessToken = token }
 export function getWalletAccessToken(): string | null { return _walletAccessToken }
 
-async function authedFetch(path: string, body: unknown): Promise<Response> {
+async function authedFetch(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
   const token = _walletAccessToken
     || (await supabase().auth.getSession()).data.session?.access_token
     || SUPABASE_ANON_KEY
@@ -35,6 +35,7 @@ async function authedFetch(path: string, body: unknown): Promise<Response> {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(body),
+    signal,
   })
 }
 
@@ -160,7 +161,10 @@ export async function requestLoan(payload: LoanRequestPayload): Promise<LoanDeci
   }
 }
 
-export async function scoreCredit(inputs: LoanRequestPayload): Promise<ScoreResult> {
+export async function scoreCredit(
+  inputs: LoanRequestPayload,
+  onCre?: (cre: CreDecision) => void,
+): Promise<ScoreResult> {
   const body = {
     amountBRL: inputs.amountBRL,
     reason: REASON_MAP[inputs.reason] ?? 'other',
@@ -176,18 +180,25 @@ export async function scoreCredit(inputs: LoanRequestPayload): Promise<ScoreResu
   const r = await authedFetch('score-credit', body)
   if (!r.ok) throw new Error(`score-credit: ${r.status} ${await r.text()}`)
   const result = (await r.json()) as ScoreResult
-  const cre = await creDecide(body)
-  if (cre) result.cre = cre
+  if (onCre) {
+    void creDecide(body).then((cre) => { if (cre) onCre(cre) })
+  }
   return result
 }
 
+const CRE_DECIDE_TIMEOUT_MS = 90_000
+
 async function creDecide(body: unknown): Promise<CreDecision | null> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), CRE_DECIDE_TIMEOUT_MS)
   try {
-    const r = await authedFetch('cre-decide', body)
+    const r = await authedFetch('cre-decide', body, ctrl.signal)
     if (!r.ok) return null
     return (await r.json()) as CreDecision
   } catch {
     return null
+  } finally {
+    clearTimeout(timer)
   }
 }
 

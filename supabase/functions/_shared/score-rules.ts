@@ -1,4 +1,4 @@
-import { cappedBRL, CREDIT_LIMIT_MAX_BRL, MONEY_CAP_BRL } from './limits.ts'
+import { CREDIT_LIMIT_MAX_BRL } from './limits.ts'
 
 export type Resposta = 'boa' | 'media' | 'ruim'
 
@@ -70,17 +70,10 @@ const MAX_INTEREST = 0.049
 const POINTS_PER: Record<Resposta, number> = { boa: 3, media: 2, ruim: 1 }
 const MAX_POINTS = 21
 
-// Linha de crédito por fidelidade (estilo cartão Nubank): o limite EXIBIDO sobe a
-// cada empréstimo pago em dia. O dinheiro REAL sacável continua capado em MONEY_CAP_BRL.
-const CREDIT_LINE_BASE_BRL = Number(Deno.env.get('CREDIT_LINE_BASE_BRL') ?? String(MONEY_CAP_BRL))
-const CREDIT_LINE_STEP_BRL = Number(Deno.env.get('CREDIT_LINE_STEP_BRL') ?? String(MONEY_CAP_BRL))
-const CREDIT_LINE_MAX_TIERS = Number(Deno.env.get('CREDIT_LINE_MAX_TIERS') ?? '4')
-
-function creditLineFor(repaidLoans: number | undefined): number {
-  const repaid = Number.isFinite(repaidLoans) ? Math.max(0, Math.floor(repaidLoans as number)) : 0
-  const tier = Math.min(repaid, CREDIT_LINE_MAX_TIERS)
-  const line = CREDIT_LINE_BASE_BRL + CREDIT_LINE_STEP_BRL * tier
-  return Math.max(MONEY_CAP_BRL, Math.min(line, CREDIT_LIMIT_MAX_BRL))
+// Limite de crédito = 10% da média salarial (faturamento dos últimos 6 meses).
+// O dinheiro REAL sacável continua capado em MONEY_CAP_BRL (cappedBRL/brlToUsdc).
+function creditLimitFor(faturamentoMensalBRL: number): number {
+  return Math.min(Math.round(faturamentoMensalBRL * 0.10), CREDIT_LIMIT_MAX_BRL)
 }
 
 function classifyTempo(meses: number): Resposta {
@@ -171,10 +164,9 @@ export function computeScoreV5(inputs: ScoreInputs): ScoreResult {
   const score = Math.round((points / MAX_POINTS) * 1000)
 
   const baseRatio = inputs.negativacao === 'nao' ? 0.10 : 0.05
-  const limit_brl = creditLineFor(inputs.repaid_loans_count)
+  const limit_brl = creditLimitFor(inputs.faturamento_mensal_brl)
 
-  const DEMO_RELAX_LIMIT = (Deno.env.get('DEMO_RELAX_LIMIT') ?? 'true').toLowerCase() === 'true'
-  if (inputs.amount_brl > limit_brl && !DEMO_RELAX_LIMIT) {
+  if (inputs.amount_brl > limit_brl) {
     return {
       approved: false,
       rejection_reason: 'Valor excede o limite disponível.',
@@ -200,7 +192,7 @@ export function computeScoreV5(inputs: ScoreInputs): ScoreResult {
     limit_brl,
     interest_pct,
     installments: installmentsFor(inputs.amount_brl),
-    approved_amount_brl: cappedBRL(inputs.amount_brl),
+    approved_amount_brl: inputs.amount_brl,
   }
 }
 
