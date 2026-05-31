@@ -37,12 +37,12 @@ export function ScoreBreakdown({ breakdown }: ScoreBreakdownProps) {
     <div style={{
       display: 'grid',
       gridTemplateColumns: 'repeat(2, 1fr)',
-      gap: 12,
+      gap: 18,
     }}>
       {entries.map(([key, rating]) => (
-        <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-          <span style={{ fontSize: 11, color: 'var(--mute)', fontWeight: 500 }}>{LABELS[key]}</span>
-          <Pill tone={RATING_TONE[rating]} size="sm">{RATING_LABEL[rating]}</Pill>
+        <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 7 }}>
+          <span style={{ fontSize: 13, color: 'var(--mute)', fontWeight: 500 }}>{LABELS[key]}</span>
+          <Pill tone={RATING_TONE[rating]} size="md">{RATING_LABEL[rating]}</Pill>
         </div>
       ))}
     </div>

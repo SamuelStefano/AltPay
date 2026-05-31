@@ -62,11 +62,15 @@ export function ApprovedHero({ decision, phase, release, onEfetuar, onSacar, onS
 
       {decision.score_breakdown && (
         <div style={{
-          marginTop: 16,
+          marginTop: 20,
+          width: '100%',
+          maxWidth: 460,
+          marginLeft: 'auto',
+          marginRight: 'auto',
           background: 'var(--surface)',
           border: '1px solid var(--line)',
-          borderRadius: 16,
-          padding: 16,
+          borderRadius: 20,
+          padding: 24,
         }}>
           <ScoreBreakdown breakdown={decision.score_breakdown} />
         </div>
