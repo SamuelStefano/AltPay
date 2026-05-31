@@ -161,7 +161,10 @@ export async function requestLoan(payload: LoanRequestPayload): Promise<LoanDeci
   }
 }
 
-export async function scoreCredit(inputs: LoanRequestPayload): Promise<ScoreResult> {
+export async function scoreCredit(
+  inputs: LoanRequestPayload,
+  onCre?: (cre: CreDecision) => void,
+): Promise<ScoreResult> {
   const body = {
     amountBRL: inputs.amountBRL,
     reason: REASON_MAP[inputs.reason] ?? 'other',
@@ -177,8 +180,9 @@ export async function scoreCredit(inputs: LoanRequestPayload): Promise<ScoreResu
   const r = await authedFetch('score-credit', body)
   if (!r.ok) throw new Error(`score-credit: ${r.status} ${await r.text()}`)
   const result = (await r.json()) as ScoreResult
-  const cre = await creDecide(body)
-  if (cre) result.cre = cre
+  if (onCre) {
+    void creDecide(body).then((cre) => { if (cre) onCre(cre) })
+  }
   return result
 }
 
