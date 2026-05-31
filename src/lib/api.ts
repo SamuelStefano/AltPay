@@ -24,7 +24,7 @@ let _walletAccessToken: string | null = null
 export function setWalletAccessToken(token: string | null) { _walletAccessToken = token }
 export function getWalletAccessToken(): string | null { return _walletAccessToken }
 
-async function authedFetch(path: string, body: unknown): Promise<Response> {
+async function authedFetch(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
   const token = _walletAccessToken
     || (await supabase().auth.getSession()).data.session?.access_token
     || SUPABASE_ANON_KEY
@@ -35,6 +35,7 @@ async function authedFetch(path: string, body: unknown): Promise<Response> {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(body),
+    signal,
   })
 }
 
@@ -181,13 +182,19 @@ export async function scoreCredit(inputs: LoanRequestPayload): Promise<ScoreResu
   return result
 }
 
+const CRE_DECIDE_TIMEOUT_MS = 90_000
+
 async function creDecide(body: unknown): Promise<CreDecision | null> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), CRE_DECIDE_TIMEOUT_MS)
   try {
-    const r = await authedFetch('cre-decide', body)
+    const r = await authedFetch('cre-decide', body, ctrl.signal)
     if (!r.ok) return null
     return (await r.json()) as CreDecision
   } catch {
     return null
+  } finally {
+    clearTimeout(timer)
   }
 }
 
