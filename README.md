@@ -27,6 +27,8 @@ Pede no app → score on-chain via Chainlink CRE aprova → **Pix cai na conta e
 
 ## Chainlink integration (DR-004)
 
+> 📄 **Detalhe completo (arquivos, linhas, endereços, estado real):** [`docs/chainlink/INTEGRATION.md`](docs/chainlink/INTEGRATION.md)
+
 100% on-chain Solana. Dois produtos Chainlink reais num único programa Anchor.
 
 ```
