@@ -161,7 +161,16 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
           txRelease: sig,
           onchainUsdc,
         })
-        if (confirmed) decision.loanId = confirmed.loanId
+        if (confirmed) {
+          decision.loanId = confirmed.loanId
+        } else {
+          // confirm-loan não espelhou: sem loanId, o saque/pagamento ficam inacessíveis.
+          // Recupera o empréstimo ativo (tx já confirmou on-chain).
+          try {
+            const home = await getHome()
+            if (home.activeLoan) decision.loanId = home.activeLoan.id
+          } catch { /* segue com o que tiver */ }
+        }
       } else if (HAS_BACKEND && decision.loanId) {
         const r = await releaseLoan(decision.loanId)
         setRelease({ cpfHashHex: r.cpfHashHex, amountUSDC: r.amountUSDC, txRelease: r.txRelease })

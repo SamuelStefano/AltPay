@@ -1,6 +1,6 @@
 // CORS helper — whitelist por origem pra endpoints autenticados.
 // Webhook é server-to-server (sem browser preflight) e usa `corsHeadersOpen`.
-const ALLOWED = (Deno.env.get('ALLOWED_ORIGINS') ?? 'http://localhost:5173,https://ubermoney.devfellowship.com')
+const ALLOWED = (Deno.env.get('ALLOWED_ORIGINS') ?? 'http://localhost:5173,https://altpay.devfellowship.com,https://ubermoney.devfellowship.com')
   .split(',').map((s) => s.trim()).filter(Boolean)
 
 const BASE_HEADERS = {
