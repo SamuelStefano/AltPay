@@ -4,6 +4,7 @@ skip-lint = false
 
 [programs.devnet]
 uber-money = "6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N"
+altpay-ccip-receiver = "2Bji2TPoZs5mJrPN2HQJdszTQAP9EMuo1Bqd4t74ged2"
 
 [registry]
 url = "https://api.apr.dev"
