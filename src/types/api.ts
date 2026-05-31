@@ -35,6 +35,14 @@ export interface ScoreResult {
   interest_pct: number
   installments: number
   approved_amount_brl: number
+  cre?: CreDecision
+}
+
+export interface CreDecision {
+  loanDecisionPda: string
+  borrowerWallet: string
+  cpfHashHex: string
+  [k: string]: unknown
 }
 
 export interface RepayAttestationPayload {
