@@ -148,7 +148,7 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
         })
         await connection.confirmTransaction(sig, 'confirmed')
 
-        const confirmed = await confirmLoan(decision.requestId, sig).catch((e) => {
+        const confirmed = await confirmLoan(decision.requestId, sig, loanPda.toBase58()).catch((e) => {
           console.error('[efetuar] confirm-loan failed (tx confirmou mas DB nao espelhou)', e)
           return null
         })
@@ -255,7 +255,7 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
             kind: 'loan',
             amountBRL: decision.approvedAmountBRL,
             label: 'Empréstimo aberto',
-            sub: `${decision.installments}× · ${decision.interestPct.toFixed(1)}%/mês · vence ${dateBR(decision.dueDate)}`,
+            sub: `${decision.interestPct.toFixed(1)}%/mês · vence ${dateBR(decision.dueDate)}`,
             timestamp: r.timestamp,
           },
           ...s.activity,

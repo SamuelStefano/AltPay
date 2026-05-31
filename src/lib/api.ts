@@ -184,8 +184,8 @@ export interface ConfirmLoanResponse {
   explorer: string
 }
 
-export async function confirmLoan(requestId: string, txRelease: string): Promise<ConfirmLoanResponse> {
-  const r = await authedFetch('confirm-loan', { requestId, txRelease })
+export async function confirmLoan(requestId: string, txRelease: string, loanPda?: string): Promise<ConfirmLoanResponse> {
+  const r = await authedFetch('confirm-loan', { requestId, txRelease, loanPda })
   if (!r.ok) throw new Error(`confirm-loan: ${r.status} ${await r.text()}`)
   return r.json()
 }
