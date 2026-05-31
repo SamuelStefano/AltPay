@@ -10,7 +10,7 @@
 - **Logo AltPay** central
 - **Tagline:** "Crédito na hora, pra quem roda."
 - **Subtitle:** Hackanation 2026 · Solana + Chainlink · RWA
-- **Time:** Samuel Stefano · William Rodrigo · Tainan Fidelis · Orlando Souza
+- **Time:** Daniel Santos · Carlos Eduardo de Paula Nunes · Ryan
 - Footer: 4 selos sponsor (Solana / Chainlink / Woovi / DFL)
 
 ---
@@ -138,10 +138,9 @@ Motorista (Phantom) → Upload print Uber → Score Chainlink CRE
 
 ## Slide 10 — O time + próximos passos
 **Equipe:**
-- **Samuel Stefano** — lead AltPay (full-stack + on-chain)
-- **William Rodrigo** — lead Chain Oil (Token-2022)
-- **Tainan Fidelis** — TL arquitetura
-- **Orlando Souza** — mentor cripto
+- **Daniel Santos**
+- **Carlos Eduardo de Paula Nunes**
+- **Ryan**
 
 **Roadmap v2 (pós-hackathon):**
 - CCIP receiver real (router program SVM)
