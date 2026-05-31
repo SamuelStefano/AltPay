@@ -1,5 +1,15 @@
 {
-  "wallet": "CQziGuEV4i8yGBHwQQJMpe6tACSMR5jWUWjmYSGVDAhW",
-  "monthlyIncomeBRL": 6500,
-  "requestedAmountBRL": 1
+  "cpfHash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+  "borrowerSol32": "0xa9962b66e8e70cc8131c3a42a83afde3ca803e0f3a421f339a261f144f503931",
+  "loanDecisionPda32": "0x3333333333333333333333333333333333333333333333333333333333333333",
+  "faturamento_mensal_brl": 6500,
+  "amount_brl": 1,
+  "tempo_uber_meses": 18,
+  "dias_semana": 6,
+  "corridas_semana": 55,
+  "fonte_renda": "uber_principal",
+  "nota_motorista": 4.9,
+  "status_veiculo": "proprio",
+  "negativacao": "nao",
+  "repaid_loans_count": 0
 }
