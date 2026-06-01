@@ -54,8 +54,8 @@ Motorista (Phantom)
 | **Data Feeds Solana** (SOL/USD) | ✅ **CPI on-chain real** | tx [2Uu56mExh...yWF2](https://explorer.solana.com/tx/2Uu56mExht7tRoaxdy2W41eAx3z9kByJfrF8LiErKDUeRGpZT7G8yWVdGkQaDQ33H3e7mH3R4CxVkMtzNGQ7yWF2?cluster=devnet) (programa invoke `HEvSKof…`) |
 | Ed25519 oracle attestation | ✅ on-chain via sysvar + **anti-forja** (`instruction_index == 0xFFFF`) | prova on-chain: `scripts/smoke-repay-forgery.ts` (erro 6013 `InvalidRepayAttestationLayout`) |
 | CCIP cross-chain | 📋 roadmap v2 (sem EVM no MVP) | DR-004 |
-| CRE deploy + verify Sepolia | ⏳ 28/05 | Etherscan link aqui (TODO) |
-| CCIP `ccipSend` Sepolia | ⏳ 28/05 | `messageId` em [ccip.chain.link](https://ccip.chain.link) (TODO) |
+| CRE deploy + verify Sepolia  | Etherscan link aqui (TODO) |
+| CCIP `ccipSend` Sepolia | `messageId` em [ccip.chain.link](https://ccip.chain.link) (TODO) |
 | Solana receiver (CCIP) | 📋 fora do MVP — Solana-only, sem hop CCIP. Desembolso = motorista chama `borrower_request_loan` direto (Phantom signer). CCIP cross-chain é roadmap v2. | DR-004 |
 
 **Pivot 28/05 (DR-004):** Saímos do MOCK CCIP e fomos pra **Chainlink real on-chain Solana**:
