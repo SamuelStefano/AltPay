@@ -16,3 +16,7 @@ export function brlToUsdc(amountBRL: number): bigint {
 export function cappedBRL(amountBRL: number): number {
   return Math.min(amountBRL, MONEY_CAP_BRL)
 }
+
+export function usdcToBrl(amountUSDC: bigint): number {
+  return Number(amountUSDC) * BRL_PER_USDC / USDC_DECIMALS
+}
