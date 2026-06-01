@@ -78,6 +78,77 @@ export async function createCharge(input: CreateChargeInput): Promise<CreateChar
   }
 }
 
+export interface CreatePaymentInput {
+  correlationId: string
+  amountBRL: number
+  comment: string
+  pixKey: string
+  pixKeyType: 'cpf' | 'email' | 'phone' | 'evp'
+}
+
+export interface CreatePaymentOutput {
+  paymentId: string
+  status: string
+  raw: Record<string, unknown>
+}
+
+const PIX_ALIAS_TYPE: Record<CreatePaymentInput['pixKeyType'], string> = {
+  cpf: 'CPF', email: 'EMAIL', phone: 'PHONE', evp: 'RANDOM',
+}
+
+function normalizeAlias(pixKey: string, type: CreatePaymentInput['pixKeyType']): string {
+  return type === 'cpf' || type === 'phone' ? pixKey.replace(/\D/g, '') : pixKey
+}
+
+export async function createPayment(input: CreatePaymentInput): Promise<CreatePaymentOutput> {
+  if (WOOVI_MODE === 'mock') {
+    return { paymentId: input.correlationId, status: 'CONFIRMED', raw: { mock: true, correlationId: input.correlationId } }
+  }
+
+  const body = {
+    value: Math.round(input.amountBRL * 100),
+    correlationID: input.correlationId,
+    destinationAlias: normalizeAlias(input.pixKey, input.pixKeyType),
+    destinationAliasType: PIX_ALIAS_TYPE[input.pixKeyType],
+    comment: input.comment,
+  }
+
+  const res = await fetch(`${WOOVI_BASE_URL}/payment`, {
+    method: 'POST',
+    headers: { 'Authorization': WOOVI_APP_ID, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(25_000),
+  })
+  const text = await res.text()
+  let data: Record<string, unknown> = {}
+  try { data = JSON.parse(text) } catch { /* keep empty */ }
+  if (!res.ok) throw new Error(`Woovi payment ${res.status}: ${text}`)
+
+  const payment = (data.payment ?? data) as Record<string, unknown>
+  return {
+    paymentId: (payment.id ?? payment.correlationID ?? input.correlationId) as string,
+    status: (payment.status ?? 'CREATED') as string,
+    raw: data,
+  }
+}
+
+// Pagamento nasce CREATED; aprova via API pra sair sem toque manual no painel.
+export async function approvePayment(correlationId: string): Promise<Record<string, unknown>> {
+  if (WOOVI_MODE === 'mock') return { mock: true, status: 'CONFIRMED' }
+
+  const res = await fetch(`${WOOVI_BASE_URL}/payment/approve`, {
+    method: 'POST',
+    headers: { 'Authorization': WOOVI_APP_ID, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ correlationID: correlationId }),
+    signal: AbortSignal.timeout(25_000),
+  })
+  const text = await res.text()
+  let data: Record<string, unknown> = {}
+  try { data = JSON.parse(text) } catch { /* keep empty */ }
+  if (!res.ok) throw new Error(`Woovi approve ${res.status}: ${text}`)
+  return data
+}
+
 export function mapWooviStatus(raw: string): 'pending' | 'confirmed' | 'failed' {
   if (/COMPLETED|CONFIRMED|PAID|SUCCESS/i.test(raw)) return 'confirmed'
   if (/FAILED|ERROR|DENIED|REJECTED/i.test(raw)) return 'failed'

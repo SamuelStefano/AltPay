@@ -2,8 +2,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
-import { isValidCpf } from '../_shared/cpf.ts'
-import { createCharge, WOOVI_MODE } from '../_shared/woovi.ts'
+import { createPayment, approvePayment, WOOVI_MODE } from '../_shared/woovi.ts'
 import { usdcToBrl } from '../_shared/limits.ts'
 
 const PROGRAM_ID_STR = Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
@@ -191,26 +190,24 @@ serve((req) => withAuth(req, async (req, user) => {
 
   await admin.from('users').update({ pix_key: body.pixKey, pix_key_type: body.pixKeyType }).eq('id', user.id)
 
-  const { data: cnhForName } = await admin
-    .from('documents').select('ocr_data').eq('user_id', user.id).eq('kind', 'cnh').maybeSingle()
-  const customerName = (cnhForName?.ocr_data as { name?: string } | null)?.name?.trim()
-
-  let charge
+  let payment
   try {
-    charge = await createCharge({
+    payment = await createPayment({
       correlationId,
       amountBRL,
-      comment: `AltPay - saque emprestimo ${body.loanId.slice(0, 8)}`,
-      customer: { name: customerName || 'Motorista AltPay', ...(body.pixKeyType === 'cpf' && isValidCpf(body.pixKey.replace(/\D/g, '')) ? { taxID: body.pixKey.replace(/\D/g, '') } : {}) },
+      comment: `AltPay saque ${body.loanId.slice(0, 8)}`,
+      pixKey: body.pixKey,
+      pixKeyType: body.pixKeyType,
     })
+    await approvePayment(correlationId)
   } catch (e) {
     await admin.from('payouts').update({ status: 'failed', error_message: String(e) }).eq('id', payout.id)
     await admin.from('cashout_intents').update({ status: 'pix_failed_refund_due', error_message: String(e) })
       .eq('source', 'uber_money').eq('client_intent_id', body.clientIntentId)
-    return json({ error: 'Woovi charge failed', details: String(e) }, 502, req)
+    return json({ error: 'Woovi payment failed', details: String(e) }, 502, req)
   }
 
-  await admin.from('payouts').update({ woovi_payload: charge.raw }).eq('id', payout.id)
+  await admin.from('payouts').update({ woovi_payload: payment.raw }).eq('id', payout.id)
   await admin.from('cashout_intents').update({ status: 'pix_dispatched' })
     .eq('source', 'uber_money').eq('client_intent_id', body.clientIntentId)
 
