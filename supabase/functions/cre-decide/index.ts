@@ -4,10 +4,10 @@ import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 import { normalizeScoreBody } from '../_shared/normalize-score-body.ts'
 import { deriveCpfHash } from '../_shared/cpf-hash.ts'
-import { bufToHex, base58Decode } from '../_shared/crypto.ts'
-import { PublicKey } from '../_shared/anchor-signer.ts'
+import { bufToHex, bufToBase58, base58Decode } from '../_shared/crypto.ts'
+import { findProgramAddress } from '../_shared/pda.ts'
 
-const RECEIVER_PROGRAM_ID = new PublicKey(
+const RECEIVER_PROGRAM_ID = base58Decode(
   Deno.env.get('RECEIVER_PROGRAM_ID') ?? '2Bji2TPoZs5mJrPN2HQJdszTQAP9EMuo1Bqd4t74ged2',
 )
 const DECISION_SEED = new TextEncoder().encode('decision')
@@ -38,12 +38,12 @@ serve((req) => withAuth(req, async (req, user) => {
   }
   if (borrowerSol32.length !== 32) return json({ error: 'Wallet not 32 bytes' }, 400, req)
 
-  const [decisionPda] = PublicKey.findProgramAddressSync([DECISION_SEED, cpf.cpfHash], RECEIVER_PROGRAM_ID)
+  const { pubkey: decisionPda32 } = await findProgramAddress([DECISION_SEED, cpf.cpfHash], RECEIVER_PROGRAM_ID)
 
   const payload = {
     cpfHash: '0x' + bufToHex(cpf.cpfHash),
     borrowerSol32: '0x' + bufToHex(borrowerSol32),
-    loanDecisionPda32: '0x' + bufToHex(decisionPda.toBytes()),
+    loanDecisionPda32: '0x' + bufToHex(decisionPda32),
     faturamento_mensal_brl: inputs.faturamento_mensal_brl,
     amount_brl: inputs.amount_brl,
     tempo_uber_meses: inputs.tempo_uber_meses,
@@ -77,7 +77,7 @@ serve((req) => withAuth(req, async (req, user) => {
   const decision = bridgeBody.decision
   return json({
     ...decision,
-    loanDecisionPda: decisionPda.toBase58(),
+    loanDecisionPda: bufToBase58(decisionPda32),
     borrowerWallet: wallet,
     cpfHashHex: cpf.cpfHashHex,
   }, 200, req)

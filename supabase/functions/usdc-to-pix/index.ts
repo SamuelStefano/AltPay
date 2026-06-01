@@ -9,7 +9,7 @@ import { cappedBRL, brlToUsdc } from '../_shared/limits.ts'
 const PROGRAM_ID_STR = Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
 // PDA determinística [vault] e mint USDC. Constantes evitam derivar/baixar
 // web3.js no isolate — derivação estática a partir do PROGRAM_ID.
-const VAULT_PDA = Deno.env.get('VAULT_PDA') ?? '6XPi5Xo6N5Ddq9hpZHzZNGWeQT42Boz1uF6Lwo7Dosrf'
+const VAULT_PDA = Deno.env.get('VAULT_PDA') ?? 'AE5KWqjhDGNRvk4bV4nEJGbcSy15eAWVVazHyPsjbnxz'
 const USDC_MINT = Deno.env.get('USDC_MINT_DEVNET') ?? '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'
 const RPC_URL = Deno.env.get('SOLANA_RPC_URL') ?? 'https://api.devnet.solana.com'
 

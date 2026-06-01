@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.dev-reset]
 verify_jwt = false
+
+[functions.cre-decide]
+verify_jwt = false
