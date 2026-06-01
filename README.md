@@ -216,8 +216,8 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 - ✅ Helius RPC + QuickNode failover env (Q25 v9)
 - ✅ CRE workflow score validado via `cre workflow simulate` (DON sandbox)
 - ✅ Vercel deploy em prod (https://ubermoney.devfellowship.com)
-- ⏳ Vídeo Plano B 60s (Samuel grava)
-- ⏳ USDC return (DR-003 D3: adiado, migration 0006 prep feita)
+-  Vídeo Plano B 60s 
+-  USDC return 
 
 ## Time
 Daniel Santos · Carlos Eduardo de Paula Nunes · Ryan.
