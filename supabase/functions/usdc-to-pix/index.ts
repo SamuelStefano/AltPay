@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
-import { createPayment, approvePayment, WOOVI_MODE } from '../_shared/woovi.ts'
+import { createPayment, WOOVI_MODE } from '../_shared/woovi.ts'
 import { usdcToBrl } from '../_shared/limits.ts'
 
 const PROGRAM_ID_STR = Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
@@ -199,7 +199,6 @@ serve((req) => withAuth(req, async (req, user) => {
       pixKey: body.pixKey,
       pixKeyType: body.pixKeyType,
     })
-    await approvePayment(correlationId)
   } catch (e) {
     await admin.from('payouts').update({ status: 'failed', error_message: String(e) }).eq('id', payout.id)
     await admin.from('cashout_intents').update({ status: 'pix_failed_refund_due', error_message: String(e) })
