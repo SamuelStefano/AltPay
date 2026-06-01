@@ -4,7 +4,7 @@ import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 import { isValidCpf } from '../_shared/cpf.ts'
 import { createCharge, WOOVI_MODE } from '../_shared/woovi.ts'
-import { cappedBRL, brlToUsdc } from '../_shared/limits.ts'
+import { usdcToBrl } from '../_shared/limits.ts'
 
 const PROGRAM_ID_STR = Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
 // PDA determinística [vault] e mint USDC. Constantes evitam derivar/baixar
@@ -32,7 +32,9 @@ interface RpcTokenBalance {
 // motorista chamou nosso programa E uma conta de token USDC pertencente ao
 // vault PDA recebeu >= amount. Usa JSON-RPC cru (fetch) em vez de web3.js —
 // carregar web3.js no isolate estoura WORKER_RESOURCE_LIMIT (HTTP 546).
-async function verifyCashOut(sig: string, borrowerWallet: string, amountUSDC: bigint): Promise<string | null> {
+type VerifyResult = { error: string } | { depositedUsdc: bigint }
+
+async function verifyCashOut(sig: string, borrowerWallet: string): Promise<VerifyResult> {
   const res = await fetch(RPC_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -41,26 +43,27 @@ async function verifyCashOut(sig: string, borrowerWallet: string, amountUSDC: bi
       params: [sig, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0, commitment: 'confirmed' }],
     }),
   })
-  if (!res.ok) return `rpc getTransaction http ${res.status}`
+  if (!res.ok) return { error: `rpc getTransaction http ${res.status}` }
   const tx = (await res.json())?.result
-  if (!tx) return 'tx not found on-chain (devnet)'
-  if (tx.meta?.err) return `tx failed on-chain: ${JSON.stringify(tx.meta.err)}`
+  if (!tx) return { error: 'tx not found on-chain (devnet)' }
+  if (tx.meta?.err) return { error: `tx failed on-chain: ${JSON.stringify(tx.meta.err)}` }
 
   const keys: string[] = (tx.transaction?.message?.accountKeys ?? []).map((k: { pubkey: string }) => k.pubkey)
-  if (!keys.includes(PROGRAM_ID_STR)) return 'tx does not call uber_money program'
-  if (keys[0] !== borrowerWallet) return 'tx fee payer is not the borrower wallet'
+  if (!keys.includes(PROGRAM_ID_STR)) return { error: 'tx does not call uber_money program' }
+  if (keys[0] !== borrowerWallet) return { error: 'tx fee payer is not the borrower wallet' }
 
   const isVaultUsdc = (b: RpcTokenBalance) => b.owner === VAULT_PDA && b.mint === USDC_MINT
   const pre = (tx.meta?.preTokenBalances as RpcTokenBalance[] | undefined)?.find(isVaultUsdc)
   const post = (tx.meta?.postTokenBalances as RpcTokenBalance[] | undefined)?.find(isVaultUsdc)
   // Sem o saldo pré, preAmt cairia em 0 e um saldo pré-existente alto passaria
   // como se fosse depósito — falso positivo. Exige ambos os snapshots.
-  if (!pre || !post) return 'vault token balance snapshot missing in tx metadata'
+  if (!pre || !post) return { error: 'vault token balance snapshot missing in tx metadata' }
   const preAmt = BigInt(pre.uiTokenAmount.amount ?? '0')
   const postAmt = BigInt(post.uiTokenAmount.amount ?? '0')
-  if (postAmt - preAmt < amountUSDC) return `vault received ${postAmt - preAmt}, expected >= ${amountUSDC}`
+  const deposited = postAmt - preAmt
+  if (deposited <= 0n) return { error: 'vault received no USDC deposit in this tx' }
 
-  return null
+  return { depositedUsdc: deposited }
 }
 
 serve((req) => withAuth(req, async (req, user) => {
@@ -91,9 +94,6 @@ serve((req) => withAuth(req, async (req, user) => {
     }
   }
 
-  const amountBRL = cappedBRL(Number(loan.principal_brl))
-  const amountUSDC = brlToUsdc(Number(loan.principal_brl))
-
   const { data: userRow } = await admin.from('users').select('wallet').eq('id', user.id).maybeSingle()
   if (!userRow?.wallet) return json({ error: 'User wallet not registered' }, 400, req)
 
@@ -122,16 +122,21 @@ serve((req) => withAuth(req, async (req, user) => {
     .neq('status', 'failed').neq('client_intent_id', body.clientIntentId).limit(1)
   if (loanDup?.length) return json({ error: 'loan already cashed out' }, 409, req)
 
-  const verifyErr = await verifyCashOut(body.cashOutTxSig, userRow.wallet, amountUSDC)
-  if (verifyErr) {
+  const verify = await verifyCashOut(body.cashOutTxSig, userRow.wallet)
+  if ('error' in verify) {
     await admin.from('cashout_intents').upsert({
       source: 'uber_money', client_intent_id: body.clientIntentId, user_id: user.id,
-      loan_id: body.loanId, amount_usdc: Number(amountUSDC), amount_brl: amountBRL,
+      loan_id: body.loanId, amount_usdc: 0, amount_brl: 0,
       pix_key: body.pixKey, pix_key_type: body.pixKeyType,
-      solana_signature: body.cashOutTxSig, status: 'failed', error_message: verifyErr,
+      solana_signature: body.cashOutTxSig, status: 'failed', error_message: verify.error,
     }, { onConflict: 'source,client_intent_id' })
-    return json({ error: 'cash_out verification failed', details: verifyErr }, 422, req)
+    return json({ error: 'cash_out verification failed', details: verify.error }, 422, req)
   }
+
+  // Paga o equivalente em BRL do USDC realmente depositado no vault on-chain.
+  // Imune a drift de cap (PAYOUT_MAX_BRL) entre desembolso e saque.
+  const amountUSDC = verify.depositedUsdc
+  const amountBRL = usdcToBrl(amountUSDC)
 
   // CRIT-1 fix: grava o intent uniqueness-bearing (usdc_received) ANTES de
   // inserir payout / chamar Woovi. Os índices únicos parciais (sig, loan_id) da

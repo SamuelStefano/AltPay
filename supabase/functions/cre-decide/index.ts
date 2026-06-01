@@ -15,7 +15,7 @@ const DECISION_SEED = new TextEncoder().encode('decision')
 serve((req) => withAuth(req, async (req, user) => {
   const bridgeUrl = Deno.env.get('BRIDGE_URL')
   const bridgeSecret = Deno.env.get('BRIDGE_SECRET')
-  if (!bridgeUrl || !bridgeSecret) return json({ error: 'bridge not configured' }, 500, req)
+  if (!bridgeUrl || !bridgeSecret) return json({ configured: false }, 200, req)
 
   let raw: Record<string, unknown>
   try { raw = (await req.json()) as Record<string, unknown> } catch { return json({ error: 'Invalid JSON' }, 400, req) }

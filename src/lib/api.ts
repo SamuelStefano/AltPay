@@ -194,7 +194,9 @@ async function creDecide(body: unknown): Promise<CreDecision | null> {
   try {
     const r = await authedFetch('cre-decide', body, ctrl.signal)
     if (!r.ok) return null
-    return (await r.json()) as CreDecision
+    const data = (await r.json()) as CreDecision | { configured: false }
+    if ('configured' in data && data.configured === false) return null
+    return data as CreDecision
   } catch {
     return null
   } finally {
